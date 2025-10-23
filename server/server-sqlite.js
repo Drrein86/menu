@@ -19,12 +19,23 @@ const getDatabaseConfig = () => {
   // Remove any existing SSL parameters from the URL
   const cleanUrl = dbUrl.split('?')[0];
   
-  return {
-    connectionString: cleanUrl,
-    ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL ? {
-      rejectUnauthorized: false
-    } : false
+  // Railway internal connections don't need SSL
+  const isRailwayInternal = cleanUrl.includes('.railway.internal');
+  
+  const config = {
+    connectionString: cleanUrl
   };
+  
+  // Only add SSL for external connections
+  if (!isRailwayInternal) {
+    config.ssl = {
+      rejectUnauthorized: false
+    };
+  }
+  
+  console.log(`🔗 Connecting to PostgreSQL (SSL: ${!isRailwayInternal ? 'enabled' : 'disabled for internal'})`);
+  
+  return config;
 };
 
 // Create PostgreSQL connection pool with SSL fix

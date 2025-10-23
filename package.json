@@ -1,0 +1,23 @@
+{
+  "name": "menu-display-system",
+  "version": "1.0.0",
+  "description": "מערכת תצוגת תפריט דיגיטלי עם CMS",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\" \"npm run display\"",
+    "dev-mock": "concurrently \"npm run server-mock\" \"npm run client\" \"npm run display\"",
+    "dev-sqlite": "concurrently \"npm run server-sqlite\" \"npm run client\" \"npm run display\"",
+    "server": "cd server && npm run dev",
+    "server-mock": "cd server && npm run dev-mock",
+    "server-sqlite": "cd server && npm run dev-sqlite",
+    "client": "cd client && npm run dev",
+    "display": "cd display && npm run dev",
+    "setup": "npm install && cd server && npm install && cd ../client && npm install && cd ../display && npm install"
+  },
+  "keywords": ["menu", "digital-signage", "cms"],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}
+

@@ -21,7 +21,7 @@ function initializeDatabase() {
       // Run setup
       const { mockMenus, mockMenuItems, mockScreens } = require('./mockData');
       
-      // Create tables
+      // Create tables (WITHOUT dropping existing data!)
       db.exec(`
         CREATE TABLE IF NOT EXISTS users (
           id INTEGER PRIMARY KEY AUTOINCREMENT,

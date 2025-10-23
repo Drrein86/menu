@@ -22,6 +22,7 @@ const getDatabaseConfig = () => {
   const config = {
     connectionString: dbUrl,
     ssl: {
+      require: true,
       rejectUnauthorized: false
     },
     connectionTimeoutMillis: 10000, // 10 seconds

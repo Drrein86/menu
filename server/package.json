@@ -11,11 +11,14 @@
     "dev": "nodemon server.js",
     "dev-mock": "nodemon server-mockdata.js",
     "dev-sqlite": "nodemon server-sqlite.js",
-    "start": "node server.js",
+    "dev-postgres": "nodemon server-postgres.js",
+    "start": "node server-postgres.js",
     "start-mock": "node server-mockdata.js",
     "start-sqlite": "node server-sqlite.js",
+    "start-postgres": "node server-postgres.js",
     "setup-db": "node setup-database.js",
-    "setup-sqlite": "node setup-sqlite.js"
+    "setup-sqlite": "node setup-sqlite.js",
+    "setup-postgres": "node setup-postgres.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
@@ -27,6 +30,7 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "mysql2": "^3.6.5",
+    "pg": "^8.16.3",
     "socket.io": "^4.6.2",
     "uuid": "^9.0.1"
   },

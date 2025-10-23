@@ -1,0 +1,502 @@
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require('cors');
+const path = require('path');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const multer = require('multer');
+const pool = require('./database-postgres');
+
+// Configure multer for disk storage
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, 'uploads'));
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname);
+    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 50 * 1024 * 1024 // 50MB max
+  }
+});
+
+const app = express();
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST', 'PUT', 'DELETE']
+  }
+});
+
+// Middleware - CORS
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://menu-cms.vercel.app',
+  'https://menu-display.vercel.app',
+  process.env.CLIENT_URL,
+  process.env.DISPLAY_URL
+].filter(Boolean);
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (origin.includes('.vercel.app')) return callback(null, true);
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked request from origin: ${origin}`);
+      callback(null, true);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.options('*', cors());
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// Add io to all requests
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
+// ==================== AUTH ROUTES ====================
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    console.log('🔍 Login attempt:', req.body);
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      console.log('❌ Missing username or password');
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+    
+    console.log('🔍 Looking for user:', username);
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+    const user = result.rows[0];
+    console.log('🔍 User found:', user ? 'Yes' : 'No');
+    
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    console.log('🔍 Comparing passwords...');
+    const validPassword = await bcrypt.compare(password, user.password);
+    console.log('🔍 Password valid:', validPassword);
+    
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    console.log('✅ Creating token...');
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role },
+      process.env.JWT_SECRET || 'postgres-jwt-secret',
+      { expiresIn: '24h' }
+    );
+
+    console.log('✅ Login successful!');
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        username: user.username,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('❌ Login error:', error.message);
+    console.error('❌ Stack:', error.stack);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// ==================== MENU ROUTES ====================
+
+// Get all menus
+app.get('/api/menus', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM menus ORDER BY id');
+    const menus = result.rows;
+    
+    const menusWithCount = await Promise.all(menus.map(async (menu) => {
+      const countResult = await pool.query(
+        'SELECT COUNT(*) as count FROM menu_items WHERE menu_id = $1 AND is_visible = true',
+        [menu.id]
+      );
+      return { ...menu, items_count: parseInt(countResult.rows[0].count) };
+    }));
+    
+    res.json(menusWithCount);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get menu by ID
+app.get('/api/menus/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const menuResult = await pool.query('SELECT * FROM menus WHERE id = $1', [id]);
+    const menu = menuResult.rows[0];
+    
+    if (!menu) {
+      return res.status(404).json({ error: 'Menu not found' });
+    }
+
+    const itemsResult = await pool.query(
+      'SELECT * FROM menu_items WHERE menu_id = $1 ORDER BY order_index',
+      [id]
+    );
+    
+    res.json({
+      ...menu,
+      items: itemsResult.rows
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update menu
+app.put('/api/menus/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { title, theme_color, bg_color, text_color, video_url, font_family, font_size_title, font_size_item } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE menus 
+       SET title = COALESCE($1, title),
+           theme_color = COALESCE($2, theme_color),
+           bg_color = COALESCE($3, bg_color),
+           text_color = COALESCE($4, text_color),
+           video_url = COALESCE($5, video_url),
+           font_family = COALESCE($6, font_family),
+           font_size_title = COALESCE($7, font_size_title),
+           font_size_item = COALESCE($8, font_size_item),
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $9
+       RETURNING *`,
+      [title, theme_color, bg_color, text_color, video_url, font_family, font_size_title, font_size_item, id]
+    );
+    
+    const menu = result.rows[0];
+    req.io.emit('menu_updated', menu);
+    res.json(menu);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== MENU ITEM ROUTES ====================
+
+// Create new item
+app.post('/api/items', async (req, res) => {
+  try {
+    const { menu_id, name, description, price, image_url, is_visible, order_index } = req.body;
+    
+    const safeData = {
+      menu_id: menu_id,
+      name: name || '',
+      description: description || null,
+      price: price !== undefined ? price : null,
+      image_url: image_url || null,
+      is_visible: is_visible !== undefined ? is_visible : true,
+      order_index: order_index !== undefined ? order_index : 0
+    };
+
+    console.log('➕ Creating new item:', safeData);
+    
+    const result = await pool.query(
+      `INSERT INTO menu_items (menu_id, name, description, price, image_url, is_visible, order_index)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
+       RETURNING *`,
+      [safeData.menu_id, safeData.name, safeData.description, safeData.price, safeData.image_url, safeData.is_visible, safeData.order_index]
+    );
+    
+    const item = result.rows[0];
+    console.log('✅ Item created:', item.id);
+    
+    req.io.emit('item_updated', item);
+    res.json(item);
+  } catch (error) {
+    console.error('❌ Error creating item:', error.message);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Update item
+app.put('/api/items/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { name, description, price, image_url, is_visible, order_index } = req.body;
+    
+    console.log('🔄 Updating item:', id, req.body);
+    
+    const result = await pool.query(
+      `UPDATE menu_items
+       SET name = COALESCE($1, name),
+           description = COALESCE($2, description),
+           price = COALESCE($3, price),
+           image_url = COALESCE($4, image_url),
+           is_visible = COALESCE($5, is_visible),
+           order_index = COALESCE($6, order_index)
+       WHERE id = $7
+       RETURNING *`,
+      [name, description, price, image_url, is_visible, order_index, id]
+    );
+    
+    const item = result.rows[0];
+    console.log('✅ Item updated successfully');
+    
+    req.io.emit('item_updated', item);
+    res.json(item);
+  } catch (error) {
+    console.error('❌ Error updating item:', error.message);
+    res.status(500).json({ error: 'Server error', details: error.message });
+  }
+});
+
+// Delete item
+app.delete('/api/items/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const itemResult = await pool.query('SELECT * FROM menu_items WHERE id = $1', [id]);
+    const item = itemResult.rows[0];
+    
+    await pool.query('DELETE FROM menu_items WHERE id = $1', [id]);
+    
+    req.io.emit('item_deleted', { id, menu_id: item.menu_id });
+    res.json({ message: 'Item deleted successfully' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Reorder items
+app.post('/api/items/reorder', async (req, res) => {
+  try {
+    const { items: reorderedItems } = req.body;
+    
+    for (const item of reorderedItems) {
+      await pool.query(
+        'UPDATE menu_items SET order_index = $1 WHERE id = $2',
+        [item.order_index, item.id]
+      );
+    }
+    
+    req.io.emit('items_reordered', reorderedItems);
+    res.json({ message: 'Items reordered successfully' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== SCREENS ROUTES ====================
+
+// Get all screens
+app.get('/api/screens', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM screens');
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Get screen by token for display
+app.get('/api/screens/display/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    const screenResult = await pool.query('SELECT * FROM screens WHERE token = $1', [token]);
+    const screen = screenResult.rows[0];
+    
+    if (!screen) {
+      return res.status(404).json({ error: 'Screen not found' });
+    }
+
+    const menuResult = await pool.query('SELECT * FROM menus WHERE id = $1', [screen.menu_id]);
+    const menu = menuResult.rows[0];
+    
+    if (!menu) {
+      return res.status(404).json({ error: 'Menu not found for this screen' });
+    }
+
+    const itemsResult = await pool.query(
+      'SELECT * FROM menu_items WHERE menu_id = $1 AND is_visible = true ORDER BY order_index',
+      [menu.id]
+    );
+    
+    res.json({ screen, menu: { ...menu, items: itemsResult.rows } });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Create screen
+app.post('/api/screens', async (req, res) => {
+  try {
+    const { screen_name, menu_id } = req.body;
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    
+    const result = await pool.query(
+      'INSERT INTO screens (screen_name, token, menu_id) VALUES ($1, $2, $3) RETURNING *',
+      [screen_name, token, menu_id]
+    );
+    
+    const screen = result.rows[0];
+    req.io.emit('screen_updated', screen);
+    res.json(screen);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update screen
+app.put('/api/screens/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    const { screen_name, menu_id, is_active } = req.body;
+    
+    const result = await pool.query(
+      `UPDATE screens
+       SET screen_name = COALESCE($1, screen_name),
+           menu_id = COALESCE($2, menu_id),
+           is_active = COALESCE($3, is_active),
+           last_ping = CURRENT_TIMESTAMP
+       WHERE id = $4
+       RETURNING *`,
+      [screen_name, menu_id, is_active, id]
+    );
+    
+    const screen = result.rows[0];
+    req.io.emit('screen_updated', screen);
+    res.json(screen);
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete screen
+app.delete('/api/screens/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    await pool.query('DELETE FROM screens WHERE id = $1', [id]);
+    
+    req.io.emit('screen_deleted', { id });
+    res.json({ message: 'Screen deleted successfully' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Heartbeat
+app.post('/api/screens/heartbeat/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    await pool.query('UPDATE screens SET last_ping = CURRENT_TIMESTAMP WHERE token = $1', [token]);
+    res.json({ message: 'Heartbeat received' });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ==================== UPLOAD ROUTES ====================
+
+app.post('/api/upload/image', upload.single('image'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log('📸 Image uploaded:', req.file.filename);
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    
+    res.status(200).json({
+      message: 'Image uploaded successfully',
+      url: fileUrl,
+      filename: req.file.filename
+    });
+
+    console.log('✅ Image URL:', fileUrl);
+  } catch (error) {
+    console.error('❌ Error in image upload:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Upload failed' });
+    }
+  }
+});
+
+app.post('/api/upload/video', upload.single('video'), (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    console.log('🎬 Video uploaded:', req.file.filename);
+    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    
+    res.status(200).json({
+      message: 'Video uploaded successfully',
+      url: fileUrl,
+      filename: req.file.filename
+    });
+
+    console.log('✅ Video URL:', fileUrl);
+  } catch (error) {
+    console.error('❌ Error in video upload:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Upload failed' });
+    }
+  }
+});
+
+// ==================== HEALTH CHECK ====================
+
+app.get('/api/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    mode: 'PostgreSQL Database',
+    database: 'Railway PostgreSQL'
+  });
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+server.listen(PORT, () => {
+  console.log(`\n🚀 ==============================================`);
+  console.log(`   Menu Display System Server (PostgreSQL)`);
+  console.log(`   ==============================================`);
+  console.log(`   🌐 Server: http://localhost:${PORT}`);
+  console.log(`   💾 Database: PostgreSQL`);
+  console.log(`   📊 Status: Running`);
+  console.log(`   ==============================================\n`);
+});

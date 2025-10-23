@@ -8,13 +8,27 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Pool } = require('pg');
 
-// Create PostgreSQL connection pool with SSL fix
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false
+// Parse DATABASE_URL and configure SSL properly
+const getDatabaseConfig = () => {
+  const dbUrl = process.env.DATABASE_URL;
+  
+  if (!dbUrl) {
+    throw new Error('DATABASE_URL environment variable is not set');
   }
-});
+  
+  // Remove any existing SSL parameters from the URL
+  const cleanUrl = dbUrl.split('?')[0];
+  
+  return {
+    connectionString: cleanUrl,
+    ssl: process.env.NODE_ENV === 'production' || process.env.DATABASE_URL ? {
+      rejectUnauthorized: false
+    } : false
+  };
+};
+
+// Create PostgreSQL connection pool with SSL fix
+const pool = new Pool(getDatabaseConfig());
 
 pool.on('connect', () => {
   console.log('✅ Connected to PostgreSQL database');
@@ -22,6 +36,7 @@ pool.on('connect', () => {
 
 pool.on('error', (err) => {
   console.error('❌ PostgreSQL error:', err);
+  console.error('Full error details:', JSON.stringify(err, null, 2));
 });
 
 // Auto-initialize database on startup

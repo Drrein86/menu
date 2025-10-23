@@ -16,6 +16,8 @@ const getDatabaseConfig = () => {
     throw new Error('DATABASE_URL environment variable is not set');
   }
   
+  console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
+  
   // Remove any existing SSL parameters from the URL
   const cleanUrl = dbUrl.split('?')[0];
   
@@ -23,7 +25,8 @@ const getDatabaseConfig = () => {
   const isRailwayInternal = cleanUrl.includes('.railway.internal');
   
   const config = {
-    connectionString: cleanUrl
+    connectionString: cleanUrl,
+    connectionTimeoutMillis: 10000, // 10 seconds timeout
   };
   
   // Only add SSL for external connections
@@ -34,6 +37,7 @@ const getDatabaseConfig = () => {
   }
   
   console.log(`🔗 Connecting to PostgreSQL (SSL: ${!isRailwayInternal ? 'enabled' : 'disabled for internal'})`);
+  console.log(`🔗 Connection timeout: ${config.connectionTimeoutMillis}ms`);
   
   return config;
 };
@@ -66,14 +70,18 @@ async function initializeDatabase() {
     } catch (err) {
       retries--;
       console.log(`⚠️ Connection attempt failed. Retries left: ${retries}`);
+      console.error(`⚠️ Error details:`, err.message);
+      console.error(`⚠️ Error code:`, err.code);
       
       if (retries === 0) {
         console.error('❌ Failed to connect after all retries');
+        console.error('❌ Full error:', JSON.stringify(err, null, 2));
         throw err;
       }
       
-      // Wait 2 seconds before retrying
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Wait 3 seconds before retrying (increased from 2)
+      console.log('⏳ Waiting 3 seconds before retry...');
+      await new Promise(resolve => setTimeout(resolve, 3000));
     }
   }
   

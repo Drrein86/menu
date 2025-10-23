@@ -6,6 +6,10 @@ const API_BASE_URL = import.meta.env.VITE_API_URL
   ? `${import.meta.env.VITE_API_URL}/api`
   : '/api'
 
+// Debug: הצג את ה-URL בקונסול
+console.log('🔧 API_BASE_URL:', API_BASE_URL)
+console.log('🔧 VITE_API_URL:', import.meta.env.VITE_API_URL)
+
 const api = axios.create({
   baseURL: API_BASE_URL
 })

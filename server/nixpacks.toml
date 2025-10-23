@@ -6,5 +6,5 @@ nixPkgs = ["nodejs_20", "python3"]
 cmds = ["npm ci"]
 
 [start]
-cmd = "node server-sqlite.js"
+cmd = "node server-postgres.js"
 

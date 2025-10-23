@@ -1,0 +1,13 @@
+# Railway/Nixpacks Configuration
+[phases.setup]
+nixPkgs = ["nodejs-20_x", "python3"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["node setup-sqlite.js"]
+
+[start]
+cmd = "node server-sqlite.js"
+

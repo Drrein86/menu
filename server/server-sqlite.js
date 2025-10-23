@@ -10,26 +10,49 @@ const { Pool } = require('pg');
 
 // Parse DATABASE_URL and configure SSL properly
 const getDatabaseConfig = () => {
+  // Try individual variables first (more reliable on Railway)
+  if (process.env.PGHOST && process.env.PGDATABASE) {
+    console.log('🔍 Using individual PG variables');
+    console.log(`🔗 PGHOST: ${process.env.PGHOST}`);
+    console.log(`🔗 PGPORT: ${process.env.PGPORT || 5432}`);
+    console.log(`🔗 PGDATABASE: ${process.env.PGDATABASE}`);
+    
+    const config = {
+      host: process.env.PGHOST,
+      port: parseInt(process.env.PGPORT || '5432'),
+      user: process.env.PGUSER || 'postgres',
+      password: process.env.PGPASSWORD,
+      database: process.env.PGDATABASE,
+      connectionTimeoutMillis: 10000,
+    };
+    
+    // No SSL for Railway internal
+    if (!process.env.PGHOST.includes('.railway.internal')) {
+      config.ssl = {
+        rejectUnauthorized: false
+      };
+    }
+    
+    return config;
+  }
+  
+  // Fallback to DATABASE_URL
   const dbUrl = process.env.DATABASE_URL;
   
   if (!dbUrl) {
-    throw new Error('DATABASE_URL environment variable is not set');
+    throw new Error('Neither PGHOST nor DATABASE_URL is set');
   }
   
-  console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
+  console.log('🔍 Using DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@'));
   
-  // Remove any existing SSL parameters from the URL
   const cleanUrl = dbUrl.split('?')[0];
-  
-  // Railway internal connections don't need SSL
   const isRailwayInternal = cleanUrl.includes('.railway.internal');
   
   const config = {
     connectionString: cleanUrl,
-    connectionTimeoutMillis: 10000, // 10 seconds timeout
+    connectionTimeoutMillis: 10000,
   };
   
-  // Only add SSL for external connections
   if (!isRailwayInternal) {
     config.ssl = {
       rejectUnauthorized: false
@@ -37,7 +60,6 @@ const getDatabaseConfig = () => {
   }
   
   console.log(`🔗 Connecting to PostgreSQL (SSL: ${!isRailwayInternal ? 'enabled' : 'disabled for internal'})`);
-  console.log(`🔗 Connection timeout: ${config.connectionTimeoutMillis}ms`);
   
   return config;
 };

@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
-import axios from 'axios'
-import { io } from 'socket.io-client'
+import { api, socket as socketIO } from './api'
 import './Display.css'
 
 export default function Display() {
@@ -27,7 +26,7 @@ export default function Display() {
 
   const loadDisplayData = async () => {
     try {
-      const response = await axios.get(`/api/screens/display/${token}`)
+      const response = await api.get(`/screens/display/${token}`)
       setData(response.data)
       setError(null)
     } catch (err) {
@@ -39,21 +38,20 @@ export default function Display() {
   }
 
   const setupSocket = () => {
-    const socket = io(window.location.origin)
-    socketRef.current = socket
+    socketRef.current = socketIO
 
     // האזנה לעדכונים
-    socket.on('connect', () => {
+    socketIO.on('connect', () => {
       console.log('Connected to server')
-      socket.emit('join_screen', token)
+      socketIO.emit('join_screen', token)
     })
 
-    socket.on('menu_updated', (data) => {
+    socketIO.on('menu_updated', (data) => {
       console.log('Menu updated, reloading...')
       loadDisplayData()
     })
 
-    socket.on('screen_updated', (data) => {
+    socketIO.on('screen_updated', (data) => {
       if (data.token === token) {
         console.log('Screen updated, reloading...')
         loadDisplayData()
@@ -64,11 +62,11 @@ export default function Display() {
   const setupHeartbeat = () => {
     // שליחת heartbeat כל 30 שניות
     const interval = setInterval(() => {
-      axios.post(`/api/screens/heartbeat/${token}`).catch(console.error)
+      api.post(`/screens/heartbeat/${token}`).catch(console.error)
     }, 30000)
 
     // שליחה מיידית
-    axios.post(`/api/screens/heartbeat/${token}`).catch(console.error)
+    api.post(`/screens/heartbeat/${token}`).catch(console.error)
 
     return () => clearInterval(interval)
   }

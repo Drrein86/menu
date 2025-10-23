@@ -3,10 +3,118 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const db = require('./database');
+
+// Auto-setup database if it doesn't exist
+function initializeDatabase() {
+  try {
+    // Check if users table exists
+    const tableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+    
+    if (!tableCheck) {
+      console.log('📦 Database not found, initializing...');
+      
+      // Run setup
+      const { mockMenus, mockMenuItems, mockScreens } = require('./mockData');
+      
+      // Create tables
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS users (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          username TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          role TEXT DEFAULT 'editor',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS menus (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key_name TEXT UNIQUE NOT NULL,
+          title TEXT NOT NULL,
+          theme_color TEXT DEFAULT '#FF6B35',
+          bg_color TEXT DEFAULT '#FFFFFF',
+          text_color TEXT DEFAULT '#2C3E50',
+          video_url TEXT,
+          video_settings TEXT,
+          layout TEXT,
+          font_family TEXT DEFAULT 'Rubik',
+          font_size_title INTEGER DEFAULT 52,
+          font_size_item INTEGER DEFAULT 24,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        
+        CREATE TABLE IF NOT EXISTS menu_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          menu_id INTEGER NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT,
+          price REAL,
+          image_url TEXT,
+          is_visible INTEGER DEFAULT 1,
+          order_index INTEGER DEFAULT 0,
+          modifiers TEXT,
+          FOREIGN KEY (menu_id) REFERENCES menus(id) ON DELETE CASCADE
+        );
+        
+        CREATE TABLE IF NOT EXISTS screens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          screen_name TEXT NOT NULL,
+          token TEXT UNIQUE NOT NULL,
+          menu_id INTEGER NOT NULL,
+          is_active INTEGER DEFAULT 1,
+          last_ping DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (menu_id) REFERENCES menus(id)
+        );
+      `);
+      
+      // Insert admin user
+      const hashedPassword = bcrypt.hashSync('admin123', 10);
+      db.prepare('INSERT INTO users (username, password, role) VALUES (?, ?, ?)').run('admin', hashedPassword, 'admin');
+      
+      // Insert menus
+      const insertMenu = db.prepare(`
+        INSERT INTO menus (key_name, title, theme_color, bg_color, text_color, video_url, font_family, font_size_title, font_size_item)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      mockMenus.forEach(menu => {
+        insertMenu.run(menu.key_name, menu.title, menu.theme_color, menu.bg_color, menu.text_color, menu.video_url, menu.font_family, menu.font_size_title, menu.font_size_item);
+      });
+      
+      // Insert menu items
+      const insertItem = db.prepare(`
+        INSERT INTO menu_items (menu_id, name, description, price, image_url, is_visible, order_index)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      mockMenuItems.forEach(item => {
+        insertItem.run(item.menu_id, item.name, item.description, item.price, item.image_url, item.is_visible, item.order_index);
+      });
+      
+      // Insert screens
+      const insertScreen = db.prepare(`
+        INSERT INTO screens (screen_name, token, menu_id, is_active)
+        VALUES (?, ?, ?, ?)
+      `);
+      mockScreens.forEach(screen => {
+        insertScreen.run(screen.screen_name, screen.token, screen.menu_id, screen.is_active);
+      });
+      
+      console.log('✅ Database initialized successfully!');
+    } else {
+      console.log('✅ Database already exists');
+    }
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
+  }
+}
+
+// Initialize database on startup
+initializeDatabase();
 
 // Configure multer for disk storage
 const storage = multer.diskStorage({

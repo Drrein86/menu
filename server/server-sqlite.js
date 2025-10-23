@@ -8,58 +8,26 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Pool } = require('pg');
 
-// Parse DATABASE_URL and configure SSL properly
+// Simple DATABASE_URL configuration with SSL for Railway public connection
 const getDatabaseConfig = () => {
-  // Try individual variables first (more reliable on Railway)
-  if (process.env.PGHOST && process.env.PGDATABASE) {
-    console.log('🔍 Using individual PG variables');
-    console.log(`🔗 PGHOST: ${process.env.PGHOST}`);
-    console.log(`🔗 PGPORT: ${process.env.PGPORT || 5432}`);
-    console.log(`🔗 PGDATABASE: ${process.env.PGDATABASE}`);
-    
-    const config = {
-      host: process.env.PGHOST,
-      port: parseInt(process.env.PGPORT || '5432'),
-      user: process.env.PGUSER || 'postgres',
-      password: process.env.PGPASSWORD,
-      database: process.env.PGDATABASE,
-      connectionTimeoutMillis: 10000,
-    };
-    
-    // No SSL for Railway internal
-    if (!process.env.PGHOST.includes('.railway.internal')) {
-      config.ssl = {
-        rejectUnauthorized: false
-      };
-    }
-    
-    return config;
-  }
-  
-  // Fallback to DATABASE_URL
   const dbUrl = process.env.DATABASE_URL;
   
   if (!dbUrl) {
-    throw new Error('Neither PGHOST nor DATABASE_URL is set');
+    throw new Error('❌ DATABASE_URL is not set!');
   }
   
-  console.log('🔍 Using DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@'));
+  console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
   
-  const cleanUrl = dbUrl.split('?')[0];
-  const isRailwayInternal = cleanUrl.includes('.railway.internal');
-  
+  // Railway Public URL requires SSL
   const config = {
-    connectionString: cleanUrl,
-    connectionTimeoutMillis: 10000,
+    connectionString: dbUrl,
+    ssl: {
+      rejectUnauthorized: false
+    },
+    connectionTimeoutMillis: 10000, // 10 seconds
   };
   
-  if (!isRailwayInternal) {
-    config.ssl = {
-      rejectUnauthorized: false
-    };
-  }
-  
-  console.log(`🔗 Connecting to PostgreSQL (SSL: ${!isRailwayInternal ? 'enabled' : 'disabled for internal'})`);
+  console.log('🔗 Connecting to PostgreSQL with SSL enabled');
   
   return config;
 };

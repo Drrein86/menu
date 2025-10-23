@@ -8,7 +8,7 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "dev": "nodemon server.js",
+    "dev": "nodemon server-postgres.js",
     "dev-mock": "nodemon server-mockdata.js",
     "dev-sqlite": "nodemon server-sqlite.js",
     "dev-postgres": "nodemon server-postgres.js",

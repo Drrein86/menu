@@ -628,7 +628,7 @@ server.listen(PORT, () => {
   console.log(`   Menu Display System Server (PostgreSQL)`);
   console.log(`   ==============================================`);
   console.log(`   🌐 Server: http://localhost:${PORT}`);
-  console.log(`   💾 Database: PostgreSQL`);
-  console.log(`   📊 Status: Running`);
+  console.log(`   💾 Database: PostgreSQL (Railway)`);
+  console.log(`   📊 Status: Running - v2.0`);
   console.log(`   ==============================================\n`);
 });

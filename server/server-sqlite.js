@@ -6,7 +6,23 @@ const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
-const pool = require('./database-postgres');
+const { Pool } = require('pg');
+
+// Create PostgreSQL connection pool with SSL fix
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
+});
+
+pool.on('connect', () => {
+  console.log('✅ Connected to PostgreSQL database');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ PostgreSQL error:', err);
+});
 
 // Auto-initialize database on startup
 async function initializeDatabase() {

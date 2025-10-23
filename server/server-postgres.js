@@ -8,6 +8,138 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const pool = require('./database-postgres');
 
+// Auto-initialize database on startup
+async function initializeDatabase() {
+  const client = await pool.connect();
+  
+  try {
+    // Check if users table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_name = 'users'
+      );
+    `);
+    
+    const tablesExist = tableCheck.rows[0].exists;
+    
+    if (!tablesExist) {
+      console.log('📦 Database tables not found, initializing...');
+      
+      const { mockMenus, mockMenuItems, mockScreens } = require('./mockData');
+      
+      // Create tables
+      console.log('👤 Creating users table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id SERIAL PRIMARY KEY,
+          username VARCHAR(255) UNIQUE NOT NULL,
+          password VARCHAR(255) NOT NULL,
+          role VARCHAR(50) DEFAULT 'editor',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      console.log('📋 Creating menus table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS menus (
+          id SERIAL PRIMARY KEY,
+          key_name VARCHAR(255) UNIQUE NOT NULL,
+          title VARCHAR(255) NOT NULL,
+          theme_color VARCHAR(50) DEFAULT '#FF6B35',
+          bg_color VARCHAR(50) DEFAULT '#FFFFFF',
+          text_color VARCHAR(50) DEFAULT '#2C3E50',
+          video_url TEXT,
+          video_settings TEXT,
+          layout TEXT,
+          font_family VARCHAR(100) DEFAULT 'Rubik',
+          font_size_title INTEGER DEFAULT 52,
+          font_size_item INTEGER DEFAULT 24,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      console.log('🍽️  Creating menu_items table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS menu_items (
+          id SERIAL PRIMARY KEY,
+          menu_id INTEGER NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
+          name VARCHAR(255) NOT NULL,
+          description TEXT,
+          price DECIMAL(10, 2),
+          image_url TEXT,
+          is_visible BOOLEAN DEFAULT true,
+          order_index INTEGER DEFAULT 0,
+          modifiers TEXT
+        )
+      `);
+
+      console.log('🖥️  Creating screens table...');
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS screens (
+          id SERIAL PRIMARY KEY,
+          screen_name VARCHAR(255) NOT NULL,
+          token VARCHAR(255) UNIQUE NOT NULL,
+          menu_id INTEGER NOT NULL REFERENCES menus(id),
+          is_active BOOLEAN DEFAULT true,
+          last_ping TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Insert admin user
+      console.log('👨‍💼 Creating admin user...');
+      const hashedPassword = bcrypt.hashSync('admin123', 10);
+      await client.query(
+        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
+        ['admin', hashedPassword, 'admin']
+      );
+
+      // Insert menus
+      console.log('📋 Creating sample menus...');
+      for (const menu of mockMenus) {
+        await client.query(
+          `INSERT INTO menus (key_name, title, theme_color, bg_color, text_color, video_url, font_family, font_size_title, font_size_item)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+          [menu.key_name, menu.title, menu.theme_color, menu.bg_color, menu.text_color, menu.video_url, menu.font_family, menu.font_size_title, menu.font_size_item]
+        );
+      }
+
+      // Insert menu items
+      console.log('🥙 Creating menu items...');
+      for (const item of mockMenuItems) {
+        await client.query(
+          `INSERT INTO menu_items (menu_id, name, description, price, image_url, is_visible, order_index)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+          [item.menu_id, item.name, item.description, item.price, item.image_url, item.is_visible ? true : false, item.order_index]
+        );
+      }
+
+      // Insert screens
+      console.log('🖥️  Creating demo screens...');
+      for (const screen of mockScreens) {
+        await client.query(
+          `INSERT INTO screens (screen_name, token, menu_id, is_active)
+           VALUES ($1, $2, $3, $4)`,
+          [screen.screen_name, screen.token, screen.menu_id, screen.is_active ? true : false]
+        );
+      }
+
+      console.log('✅ Database initialized successfully!');
+    } else {
+      console.log('✅ Database tables already exist');
+    }
+  } catch (error) {
+    console.error('❌ Database initialization error:', error);
+  } finally {
+    client.release();
+  }
+}
+
+// Initialize database immediately
+initializeDatabase().catch(console.error);
+
 // Configure multer for disk storage
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {

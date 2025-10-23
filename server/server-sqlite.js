@@ -88,27 +88,46 @@ app.use((req, res, next) => {
 // Login
 app.post('/api/auth/login', async (req, res) => {
   try {
+    console.log('🔍 Login attempt:', req.body);
     const { username, password } = req.body;
     
+    if (!username || !password) {
+      console.log('❌ Missing username or password');
+      return res.status(400).json({ error: 'Username and password required' });
+    }
+    
     // מצא משתמש
+    console.log('🔍 Looking for user:', username);
     const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+    console.log('🔍 User found:', user ? 'Yes' : 'No');
+    
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
     // בדוק סיסמה
-    const validPassword = await bcrypt.compare(password, user.password);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    console.log('🔍 Comparing passwords...');
+    try {
+      const validPassword = await bcrypt.compare(password, user.password);
+      console.log('🔍 Password valid:', validPassword);
+      
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
+    } catch (bcryptError) {
+      console.error('❌ Bcrypt error:', bcryptError);
+      throw bcryptError;
     }
 
     // צור JWT
+    console.log('✅ Creating token...');
     const token = jwt.sign(
       { id: user.id, username: user.username, role: user.role },
       process.env.JWT_SECRET || 'sqlite-jwt-secret',
       { expiresIn: '24h' }
     );
 
+    console.log('✅ Login successful!');
     res.json({
       token,
       user: {
@@ -118,8 +137,9 @@ app.post('/api/auth/login', async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('❌ Login error:', error.message);
+    console.error('❌ Stack:', error.stack);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 

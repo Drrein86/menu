@@ -52,7 +52,30 @@ pool.on('error', (err) => {
 
 // Auto-initialize database on startup
 async function initializeDatabase() {
-  const client = await pool.connect();
+  console.log('🔄 Attempting to connect to PostgreSQL...');
+  
+  // Add retry logic for database connection
+  let retries = 5;
+  let client;
+  
+  while (retries > 0) {
+    try {
+      client = await pool.connect();
+      console.log('✅ Successfully connected to PostgreSQL!');
+      break;
+    } catch (err) {
+      retries--;
+      console.log(`⚠️ Connection attempt failed. Retries left: ${retries}`);
+      
+      if (retries === 0) {
+        console.error('❌ Failed to connect after all retries');
+        throw err;
+      }
+      
+      // Wait 2 seconds before retrying
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+  }
   
   try {
     // Check if users table exists

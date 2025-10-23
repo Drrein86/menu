@@ -1,6 +1,6 @@
 {
   "name": "menu-server",
-  "version": "1.0.0",
+  "version": "2.0.1",
   "description": "Backend server for menu display system",
   "main": "server.js",
   "engines": {

@@ -37,7 +37,35 @@ const io = new Server(server, {
 });
 
 // Middleware
-app.use(cors());
+// CORS - מאפשר גישה מ-Vercel וגם מ-localhost
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'https://menu-cms.vercel.app',
+  'https://menu-display.vercel.app',
+  process.env.CLIENT_URL, // מ-environment variable
+  process.env.DISPLAY_URL // מ-environment variable
+].filter(Boolean); // מסיר undefined/null
+
+app.use(cors({
+  origin: (origin, callback) => {
+    // אפשר requests ללא origin (כמו mobile apps או curl)
+    if (!origin) return callback(null, true);
+    
+    // אפשר Vercel preview deployments (*.vercel.app)
+    if (origin.includes('.vercel.app')) return callback(null, true);
+    
+    // בדוק אם ב-allowed origins
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.warn(`CORS blocked request from origin: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  credentials: true
+}));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

@@ -8,7 +8,7 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Pool } = require('pg');
 
-// Simple DATABASE_URL configuration with SSL for Railway public connection
+// Simple DATABASE_URL configuration - SSL disabled for Railway internal network
 const getDatabaseConfig = () => {
   const dbUrl = process.env.DATABASE_URL;
 
@@ -18,22 +18,15 @@ const getDatabaseConfig = () => {
 
   console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
 
-  // Parse SSL mode from URL (Railway sometimes requires it explicitly)
-  const isSsl = dbUrl.includes('proxy.rlwy.net') || dbUrl.includes('railway.app');
-
+  // Railway internal network - no SSL needed
   const config = {
     connectionString: dbUrl,
-    ssl: isSsl
-      ? {
-          require: true,
-          rejectUnauthorized: false,
-        }
-      : false,
+    ssl: false, // Disabled for Railway internal network
     statement_timeout: 10000,
     connectionTimeoutMillis: 10000,
   };
 
-  console.log(`🔗 Connecting to PostgreSQL (SSL: ${isSsl ? 'enabled' : 'disabled'})`);
+  console.log('🔗 Connecting to PostgreSQL (SSL: disabled for Railway internal network)');
 
   return config;
 };

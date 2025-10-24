@@ -11,25 +11,30 @@ const { Pool } = require('pg');
 // Simple DATABASE_URL configuration with SSL for Railway public connection
 const getDatabaseConfig = () => {
   const dbUrl = process.env.DATABASE_URL;
-  
+
   if (!dbUrl) {
     throw new Error('❌ DATABASE_URL is not set!');
   }
-  
+
   console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
-  
-  // Railway Public URL requires SSL
+
+  // Parse SSL mode from URL (Railway sometimes requires it explicitly)
+  const isSsl = dbUrl.includes('proxy.rlwy.net') || dbUrl.includes('railway.app');
+
   const config = {
     connectionString: dbUrl,
-    ssl: {
-      require: true,
-      rejectUnauthorized: false
-    },
-    connectionTimeoutMillis: 10000, // 10 seconds
+    ssl: isSsl
+      ? {
+          require: true,
+          rejectUnauthorized: false,
+        }
+      : false,
+    statement_timeout: 10000,
+    connectionTimeoutMillis: 10000,
   };
-  
-  console.log('🔗 Connecting to PostgreSQL with SSL enabled');
-  
+
+  console.log(`🔗 Connecting to PostgreSQL (SSL: ${isSsl ? 'enabled' : 'disabled'})`);
+
   return config;
 };
 

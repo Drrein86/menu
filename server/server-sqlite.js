@@ -10,13 +10,26 @@ const { Pool } = require('pg');
 
 // Simple DATABASE_URL configuration - SSL disabled for Railway internal network
 const getDatabaseConfig = () => {
+  console.log('\n==========================================');
+  console.log('🔧 DATABASE CONFIGURATION');
+  console.log('==========================================');
+  
   const dbUrl = process.env.DATABASE_URL;
 
   if (!dbUrl) {
+    console.error('❌ DATABASE_URL is NOT SET in environment variables!');
+    console.error('📋 Available environment variables:', Object.keys(process.env).filter(k => k.includes('PG') || k.includes('DATABASE')));
     throw new Error('❌ DATABASE_URL is not set!');
   }
 
+  console.log('✅ DATABASE_URL found');
   console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
+  console.log('📍 Contains sslmode=disable?', dbUrl.includes('sslmode=disable') ? '✅ YES' : '⚠️ NO');
+  console.log('📍 Host type:', 
+    dbUrl.includes('.railway.internal') ? '🔒 INTERNAL' : 
+    dbUrl.includes('proxy.rlwy.net') ? '🌐 PUBLIC PROXY' : 
+    '❓ UNKNOWN'
+  );
 
   // Railway internal network - no SSL needed
   const config = {
@@ -26,7 +39,9 @@ const getDatabaseConfig = () => {
     connectionTimeoutMillis: 10000,
   };
 
-  console.log('🔗 Connecting to PostgreSQL (SSL: disabled for Railway internal network)');
+  console.log('🔗 SSL Configuration: DISABLED (Railway internal network)');
+  console.log('⏱️  Connection timeout: 10 seconds');
+  console.log('==========================================\n');
 
   return config;
 };
@@ -45,7 +60,11 @@ pool.on('error', (err) => {
 
 // Auto-initialize database on startup
 async function initializeDatabase() {
+  console.log('\n==========================================');
+  console.log('🚀 DATABASE INITIALIZATION');
+  console.log('==========================================');
   console.log('🔄 Attempting to connect to PostgreSQL...');
+  console.log('📅 Time:', new Date().toISOString());
   
   // Add retry logic for database connection
   let retries = 5;
@@ -53,22 +72,44 @@ async function initializeDatabase() {
   
   while (retries > 0) {
     try {
+      console.log(`\n🔌 Connection attempt ${6 - retries}/5...`);
+      const startTime = Date.now();
+      
       client = await pool.connect();
-      console.log('✅ Successfully connected to PostgreSQL!');
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ Successfully connected to PostgreSQL! (${duration}ms)`);
+      console.log('==========================================\n');
       break;
     } catch (err) {
       retries--;
-      console.log(`⚠️ Connection attempt failed. Retries left: ${retries}`);
-      console.error(`⚠️ Error details:`, err.message);
-      console.error(`⚠️ Error code:`, err.code);
+      const duration = Date.now() - startTime;
+      
+      console.log(`\n❌ Connection attempt FAILED (${duration}ms)`);
+      console.log(`⚠️ Retries left: ${retries}`);
+      console.log(`⚠️ Error name: ${err.name}`);
+      console.log(`⚠️ Error message: ${err.message}`);
+      console.log(`⚠️ Error code: ${err.code || 'undefined'}`);
+      
+      if (err.stack) {
+        console.log(`⚠️ Stack trace (first 3 lines):`);
+        console.log(err.stack.split('\n').slice(0, 3).join('\n'));
+      }
       
       if (retries === 0) {
-        console.error('❌ Failed to connect after all retries');
-        console.error('❌ Full error:', JSON.stringify(err, null, 2));
+        console.error('\n==========================================');
+        console.error('❌ FINAL FAILURE - ALL RETRIES EXHAUSTED');
+        console.error('==========================================');
+        console.error('💡 Troubleshooting checklist:');
+        console.error('   1. Is DATABASE_URL set in Railway Variables?');
+        console.error('   2. Does it end with ?sslmode=disable?');
+        console.error('   3. Is the Postgres service running?');
+        console.error('   4. Are both services in the same Railway project?');
+        console.error('==========================================\n');
         throw err;
       }
       
-      // Wait 3 seconds before retrying (increased from 2)
+      // Wait 3 seconds before retrying
       console.log('⏳ Waiting 3 seconds before retry...');
       await new Promise(resolve => setTimeout(resolve, 3000));
     }

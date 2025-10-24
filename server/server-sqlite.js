@@ -14,13 +14,16 @@ const getDatabaseConfig = () => {
   console.log('🔧 DATABASE CONFIGURATION');
   console.log('==========================================');
   
-  const dbUrl = process.env.DATABASE_URL;
+  // Railway can create DATABASE_PUBLIC_URL automatically when linking services
+  const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
 
   if (!dbUrl) {
-    console.error('❌ DATABASE_URL is NOT SET in environment variables!');
-    console.error('📋 Available environment variables:', Object.keys(process.env).filter(k => k.includes('PG') || k.includes('DATABASE')));
+    console.error('❌ DATABASE_URL or DATABASE_PUBLIC_URL is NOT SET!');
+    console.error('📋 Available DB-related environment variables:', Object.keys(process.env).filter(k => k.includes('PG') || k.includes('DATABASE')));
     throw new Error('❌ DATABASE_URL is not set!');
   }
+  
+  console.log('✅ Using:', process.env.DATABASE_URL ? 'DATABASE_URL' : 'DATABASE_PUBLIC_URL');
 
   console.log('✅ DATABASE_URL found');
   console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password

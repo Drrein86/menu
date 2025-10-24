@@ -58,6 +58,46 @@ pool.on('error', (err) => {
   console.error('Full error details:', JSON.stringify(err, null, 2));
 });
 
+// Wait for DB to be ready with smart retry logic
+const waitForDB = async (pool, retries = 10, delay = 3000) => {
+  console.log('\n==========================================');
+  console.log('⏳ WAITING FOR DATABASE TO BE READY');
+  console.log('==========================================');
+  
+  while (retries > 0) {
+    try {
+      console.log(`🔌 Checking DB readiness... (${11 - retries}/10)`);
+      const startTime = Date.now();
+      
+      await pool.query('SELECT 1');
+      
+      const duration = Date.now() - startTime;
+      console.log(`✅ DB is ready! (${duration}ms)`);
+      console.log('==========================================\n');
+      return;
+    } catch (err) {
+      retries--;
+      console.log(`⚠️ DB not ready yet: ${err.message}`);
+      
+      if (retries === 0) {
+        console.error('\n==========================================');
+        console.error('❌ DB FAILED TO START IN TIME');
+        console.error('==========================================');
+        console.error('💡 Possible causes:');
+        console.error('   1. Wrong DATABASE_URL (check if it\'s the Public URL)');
+        console.error('   2. Missing ?sslmode=disable at the end');
+        console.error('   3. Postgres service is not running');
+        console.error('   4. Network connectivity issues');
+        console.error('==========================================\n');
+        throw new Error('❌ DB failed to start in time');
+      }
+      
+      console.log(`⏳ Retrying in ${delay/1000}s... (${retries} attempts left)`);
+      await new Promise(res => setTimeout(res, delay));
+    }
+  }
+};
+
 // Auto-initialize database on startup
 async function initializeDatabase() {
   console.log('\n==========================================');
@@ -241,8 +281,16 @@ async function initializeDatabase() {
   }
 }
 
-// Initialize database immediately
-initializeDatabase().catch(console.error);
+// Wait for DB to be ready, then initialize
+(async () => {
+  try {
+    await waitForDB(pool); // Wait for DB to be ready first
+    await initializeDatabase(); // Then initialize tables and data
+  } catch (err) {
+    console.error('❌ Startup failed:', err.message);
+    process.exit(1); // Exit if DB connection fails
+  }
+})();
 
 // Configure multer for disk storage
 const storage = multer.diskStorage({

@@ -71,9 +71,10 @@ async function initializeDatabase() {
   let client;
   
   while (retries > 0) {
+    const startTime = Date.now(); // Define startTime BEFORE try block
+    
     try {
       console.log(`\n🔌 Connection attempt ${6 - retries}/5...`);
-      const startTime = Date.now();
       
       client = await pool.connect();
       

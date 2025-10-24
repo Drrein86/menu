@@ -8,177 +8,59 @@ const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const { Pool } = require('pg');
 
-// Simple DATABASE_URL configuration - SSL disabled for Railway internal network
+// ==================== DATABASE CONFIG ====================
+
+// Dynamic DB config with Railway Public/Internal handling
 const getDatabaseConfig = () => {
-  console.log('\n==========================================');
-  console.log('🔧 DATABASE CONFIGURATION');
-  console.log('==========================================');
-  
-  // Railway can create DATABASE_PUBLIC_URL automatically when linking services
   const dbUrl = process.env.DATABASE_URL || process.env.DATABASE_PUBLIC_URL;
+  if (!dbUrl) throw new Error('❌ DATABASE_URL or DATABASE_PUBLIC_URL not set!');
 
-  if (!dbUrl) {
-    console.error('❌ DATABASE_URL or DATABASE_PUBLIC_URL is NOT SET!');
-    console.error('📋 Available DB-related environment variables:', Object.keys(process.env).filter(k => k.includes('PG') || k.includes('DATABASE')));
-    throw new Error('❌ DATABASE_URL is not set!');
-  }
-  
-  console.log('✅ Using:', process.env.DATABASE_URL ? 'DATABASE_URL' : 'DATABASE_PUBLIC_URL');
+  console.log('✅ Using DB:', process.env.DATABASE_URL ? 'DATABASE_URL' : 'DATABASE_PUBLIC_URL');
+  console.log('🔗 Connection string:', dbUrl.replace(/:[^:@]+@/, ':****@'));
 
-  console.log('✅ DATABASE_URL found');
-  console.log('🔍 DATABASE_URL:', dbUrl.replace(/:[^:@]+@/, ':****@')); // Hide password
-  console.log('📍 Contains sslmode=disable?', dbUrl.includes('sslmode=disable') ? '✅ YES' : '⚠️ NO');
-  console.log('📍 Host type:', 
-    dbUrl.includes('.railway.internal') ? '🔒 INTERNAL' : 
-    dbUrl.includes('proxy.rlwy.net') ? '🌐 PUBLIC PROXY' : 
-    '❓ UNKNOWN'
-  );
-
-  // Railway internal network - no SSL needed
-  const config = {
+  return {
     connectionString: dbUrl,
-    ssl: false, // Disabled for Railway internal network
-    statement_timeout: 10000,
-    connectionTimeoutMillis: 10000,
+    ssl: false, // Railway internal/public proxy doesn't need SSL for Node.js client
+    statement_timeout: 30000,      // 30s
+    connectionTimeoutMillis: 30000 // 30s
   };
-
-  console.log('🔗 SSL Configuration: DISABLED (Railway internal network)');
-  console.log('⏱️  Connection timeout: 10 seconds');
-  console.log('==========================================\n');
-
-  return config;
 };
 
-// Create PostgreSQL connection pool with SSL fix
+// Create pool
 const pool = new Pool(getDatabaseConfig());
 
-pool.on('connect', () => {
-  console.log('✅ Connected to PostgreSQL database');
-});
+pool.on('connect', () => console.log('✅ Connected to PostgreSQL'));
+pool.on('error', (err) => console.error('❌ PostgreSQL error:', err));
 
-pool.on('error', (err) => {
-  console.error('❌ PostgreSQL error:', err);
-  console.error('Full error details:', JSON.stringify(err, null, 2));
-});
-
-// Wait for DB to be ready with smart retry logic
-const waitForDB = async (pool, retries = 10, delay = 3000) => {
-  console.log('\n==========================================');
-  console.log('⏳ WAITING FOR DATABASE TO BE READY');
-  console.log('==========================================');
-  
+// ==================== WAIT FOR DB ====================
+const waitForDB = async (pool, retries = 20, delay = 3000) => {
+  console.log('⏳ Waiting for DB to be ready...');
   while (retries > 0) {
     try {
-      console.log(`🔌 Checking DB readiness... (${11 - retries}/10)`);
-      const startTime = Date.now();
-      
+      const start = Date.now();
       await pool.query('SELECT 1');
-      
-      const duration = Date.now() - startTime;
-      console.log(`✅ DB is ready! (${duration}ms)`);
-      console.log('==========================================\n');
+      console.log(`✅ DB ready (${Date.now() - start}ms)`);
       return;
     } catch (err) {
       retries--;
-      console.log(`⚠️ DB not ready yet: ${err.message}`);
-      
-      if (retries === 0) {
-        console.error('\n==========================================');
-        console.error('❌ DB FAILED TO START IN TIME');
-        console.error('==========================================');
-        console.error('💡 Possible causes:');
-        console.error('   1. Wrong DATABASE_URL (check if it\'s the Public URL)');
-        console.error('   2. Missing ?sslmode=disable at the end');
-        console.error('   3. Postgres service is not running');
-        console.error('   4. Network connectivity issues');
-        console.error('==========================================\n');
-        throw new Error('❌ DB failed to start in time');
-      }
-      
-      console.log(`⏳ Retrying in ${delay/1000}s... (${retries} attempts left)`);
-      await new Promise(res => setTimeout(res, delay));
+      console.log(`⚠️ DB not ready yet: ${err.message} (${retries} retries left)`);
+      if (retries === 0) throw new Error('❌ DB failed to start in time');
+      await new Promise(r => setTimeout(r, delay));
     }
   }
 };
 
-// Auto-initialize database on startup
-async function initializeDatabase() {
-  console.log('\n==========================================');
-  console.log('🚀 DATABASE INITIALIZATION');
-  console.log('==========================================');
-  console.log('🔄 Attempting to connect to PostgreSQL...');
-  console.log('📅 Time:', new Date().toISOString());
-  
-  // Add retry logic for database connection
-  let retries = 5;
-  let client;
-  
-  while (retries > 0) {
-    const startTime = Date.now(); // Define startTime BEFORE try block
-    
-    try {
-      console.log(`\n🔌 Connection attempt ${6 - retries}/5...`);
-      
-      client = await pool.connect();
-      
-      const duration = Date.now() - startTime;
-      console.log(`✅ Successfully connected to PostgreSQL! (${duration}ms)`);
-      console.log('==========================================\n');
-      break;
-    } catch (err) {
-      retries--;
-      const duration = Date.now() - startTime;
-      
-      console.log(`\n❌ Connection attempt FAILED (${duration}ms)`);
-      console.log(`⚠️ Retries left: ${retries}`);
-      console.log(`⚠️ Error name: ${err.name}`);
-      console.log(`⚠️ Error message: ${err.message}`);
-      console.log(`⚠️ Error code: ${err.code || 'undefined'}`);
-      
-      if (err.stack) {
-        console.log(`⚠️ Stack trace (first 3 lines):`);
-        console.log(err.stack.split('\n').slice(0, 3).join('\n'));
-      }
-      
-      if (retries === 0) {
-        console.error('\n==========================================');
-        console.error('❌ FINAL FAILURE - ALL RETRIES EXHAUSTED');
-        console.error('==========================================');
-        console.error('💡 Troubleshooting checklist:');
-        console.error('   1. Is DATABASE_URL set in Railway Variables?');
-        console.error('   2. Does it end with ?sslmode=disable?');
-        console.error('   3. Is the Postgres service running?');
-        console.error('   4. Are both services in the same Railway project?');
-        console.error('==========================================\n');
-        throw err;
-      }
-      
-      // Wait 3 seconds before retrying
-      console.log('⏳ Waiting 3 seconds before retry...');
-      await new Promise(resolve => setTimeout(resolve, 3000));
-    }
-  }
-  
+// ==================== INITIALIZE DATABASE ====================
+const initializeDatabase = async () => {
+  await waitForDB(pool);
+  const client = await pool.connect();
   try {
-    // Check if users table exists
-    const tableCheck = await client.query(`
-      SELECT EXISTS (
-        SELECT FROM information_schema.tables 
-        WHERE table_name = 'users'
-      );
-    `);
-    
-    const tablesExist = tableCheck.rows[0].exists;
-    
-    if (!tablesExist) {
-      console.log('📦 Database tables not found, initializing...');
-      
-      const { mockMenus, mockMenuItems, mockScreens } = require('./mockData');
-      
-      // Create tables
-      console.log('👤 Creating users table...');
+    // Check if tables exist
+    const res = await client.query("SELECT to_regclass('public.users') as users_table");
+    if (!res.rows[0].users_table) {
+      console.log('📦 Creating tables...');
       await client.query(`
-        CREATE TABLE IF NOT EXISTS users (
+        CREATE TABLE users (
           id SERIAL PRIMARY KEY,
           username VARCHAR(255) UNIQUE NOT NULL,
           password VARCHAR(255) NOT NULL,
@@ -187,9 +69,8 @@ async function initializeDatabase() {
         )
       `);
 
-      console.log('📋 Creating menus table...');
       await client.query(`
-        CREATE TABLE IF NOT EXISTS menus (
+        CREATE TABLE menus (
           id SERIAL PRIMARY KEY,
           key_name VARCHAR(255) UNIQUE NOT NULL,
           title VARCHAR(255) NOT NULL,
@@ -197,8 +78,6 @@ async function initializeDatabase() {
           bg_color VARCHAR(50) DEFAULT '#FFFFFF',
           text_color VARCHAR(50) DEFAULT '#2C3E50',
           video_url TEXT,
-          video_settings TEXT,
-          layout TEXT,
           font_family VARCHAR(100) DEFAULT 'Rubik',
           font_size_title INTEGER DEFAULT 52,
           font_size_item INTEGER DEFAULT 24,
@@ -207,24 +86,21 @@ async function initializeDatabase() {
         )
       `);
 
-      console.log('🍽️  Creating menu_items table...');
       await client.query(`
-        CREATE TABLE IF NOT EXISTS menu_items (
+        CREATE TABLE menu_items (
           id SERIAL PRIMARY KEY,
           menu_id INTEGER NOT NULL REFERENCES menus(id) ON DELETE CASCADE,
           name VARCHAR(255) NOT NULL,
           description TEXT,
-          price DECIMAL(10, 2),
+          price DECIMAL(10,2),
           image_url TEXT,
           is_visible BOOLEAN DEFAULT true,
-          order_index INTEGER DEFAULT 0,
-          modifiers TEXT
+          order_index INTEGER DEFAULT 0
         )
       `);
 
-      console.log('🖥️  Creating screens table...');
       await client.query(`
-        CREATE TABLE IF NOT EXISTS screens (
+        CREATE TABLE screens (
           id SERIAL PRIMARY KEY,
           screen_name VARCHAR(255) NOT NULL,
           token VARCHAR(255) UNIQUE NOT NULL,
@@ -235,95 +111,37 @@ async function initializeDatabase() {
         )
       `);
 
-      // Insert admin user
-      console.log('👨‍💼 Creating admin user...');
+      // Create admin user
       const hashedPassword = bcrypt.hashSync('admin123', 10);
-      await client.query(
-        'INSERT INTO users (username, password, role) VALUES ($1, $2, $3)',
-        ['admin', hashedPassword, 'admin']
-      );
-
-      // Insert menus
-      console.log('📋 Creating sample menus...');
-      for (const menu of mockMenus) {
-        await client.query(
-          `INSERT INTO menus (key_name, title, theme_color, bg_color, text_color, video_url, font_family, font_size_title, font_size_item)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-          [menu.key_name, menu.title, menu.theme_color, menu.bg_color, menu.text_color, menu.video_url, menu.font_family, menu.font_size_title, menu.font_size_item]
-        );
-      }
-
-      // Insert menu items
-      console.log('🥙 Creating menu items...');
-      for (const item of mockMenuItems) {
-        await client.query(
-          `INSERT INTO menu_items (menu_id, name, description, price, image_url, is_visible, order_index)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [item.menu_id, item.name, item.description, item.price, item.image_url, item.is_visible ? true : false, item.order_index]
-        );
-      }
-
-      // Insert screens
-      console.log('🖥️  Creating demo screens...');
-      for (const screen of mockScreens) {
-        await client.query(
-          `INSERT INTO screens (screen_name, token, menu_id, is_active)
-           VALUES ($1, $2, $3, $4)`,
-          [screen.screen_name, screen.token, screen.menu_id, screen.is_active ? true : false]
-        );
-      }
-
-      console.log('✅ Database initialized successfully!');
+      await client.query('INSERT INTO users (username, password, role) VALUES ($1,$2,$3)', ['admin', hashedPassword, 'admin']);
+      console.log('✅ Admin user created');
     } else {
-      console.log('✅ Database tables already exist');
+      console.log('✅ Tables already exist');
     }
-  } catch (error) {
-    console.error('❌ Database initialization error:', error);
   } finally {
     client.release();
   }
-}
+};
 
-// Wait for DB to be ready, then initialize
-(async () => {
-  try {
-    await waitForDB(pool); // Wait for DB to be ready first
-    await initializeDatabase(); // Then initialize tables and data
-  } catch (err) {
-    console.error('❌ Startup failed:', err.message);
-    process.exit(1); // Exit if DB connection fails
-  }
-})();
-
-// Configure multer for disk storage
+// ==================== MULTER CONFIG ====================
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'uploads'));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
-  }
+  destination: (req, file, cb) => cb(null, path.join(__dirname, 'uploads')),
+  filename: (req, file, cb) => cb(null, `${file.fieldname}-${Date.now()}${path.extname(file.originalname)}`)
 });
+const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB
 
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB max
-  }
-});
-
+// ==================== EXPRESS & SOCKET.IO ====================
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST', 'PUT', 'DELETE']
-  }
-});
+const io = new Server(server, { cors: { origin: '*', methods: ['GET','POST','PUT','DELETE'] } });
 
-// Middleware - CORS
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+app.use((req, res, next) => { req.io = io; next(); });
+
+// ==================== CORS ====================
 const allowedOrigins = [
   'http://localhost:3000',
   'http://localhost:3001',
@@ -335,31 +153,14 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin) return callback(null, true);
-    if (origin.includes('.vercel.app')) return callback(null, true);
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked request from origin: ${origin}`);
-      callback(null, true);
-    }
+    if (!origin || origin.includes('.vercel.app') || allowedOrigins.includes(origin)) return callback(null, true);
+    console.warn('CORS blocked:', origin);
+    callback(null, true);
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET','POST','PUT','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization']
 }));
-
-app.options('*', cors());
-
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-// Add io to all requests
-app.use((req, res, next) => {
-  req.io = io;
-  next();
-});
 
 // ==================== AUTH ROUTES ====================
 
@@ -776,14 +577,22 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Start server
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, () => {
-  console.log(`\n🚀 ==============================================`);
-  console.log(`   Menu Display System Server (PostgreSQL)`);
-  console.log(`   ==============================================`);
-  console.log(`   🌐 Server: http://localhost:${PORT}`);
-  console.log(`   💾 Database: PostgreSQL`);
-  console.log(`   📊 Status: Running`);
-  console.log(`   ==============================================\n`);
-});
+// ==================== START SERVER ====================
+(async () => {
+  try {
+    await initializeDatabase();
+    const PORT = process.env.PORT || 5000;
+    server.listen(PORT, () => {
+      console.log(`\n🚀 ==============================================`);
+      console.log(`   Menu Display System Server (PostgreSQL)`);
+      console.log(`   ==============================================`);
+      console.log(`   🌐 Server: http://localhost:${PORT}`);
+      console.log(`   💾 Database: PostgreSQL`);
+      console.log(`   📊 Status: Running`);
+      console.log(`   ==============================================\n`);
+    });
+  } catch (err) {
+    console.error('❌ Startup failed:', err);
+    process.exit(1);
+  }
+})();

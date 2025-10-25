@@ -493,9 +493,17 @@ app.post('/api/screens', async (req, res) => {
   try {
     const { screen_name, menu_id } = req.body;
     
+    console.log('🖥️ Creating screen with:', { screen_name, menu_id, body: req.body });
+    
     // Validation
-    if (!screen_name || !menu_id) {
-      return res.status(400).json({ error: 'screen_name and menu_id are required' });
+    if (!screen_name) {
+      console.log('❌ Missing screen_name');
+      return res.status(400).json({ error: 'screen_name is required' });
+    }
+    
+    if (!menu_id) {
+      console.log('❌ Missing menu_id');
+      return res.status(400).json({ error: 'menu_id is required' });
     }
     
     const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
@@ -506,10 +514,12 @@ app.post('/api/screens', async (req, res) => {
     );
     
     const screen = result.rows[0];
+    console.log('✅ Screen created:', screen.id);
     req.io.emit('screen_updated', screen);
     res.json(screen);
   } catch (error) {
-    console.error('Error creating screen:', error);
+    console.error('❌ Error creating screen:', error.message);
+    console.error('Full error:', error);
     res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
@@ -575,7 +585,9 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
     }
 
     console.log('📸 Image uploaded:', req.file.filename);
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    // Force HTTPS in production
+    const protocol = req.get('x-forwarded-proto') || req.protocol;
+    const fileUrl = `${protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     
     res.status(200).json({
       message: 'Image uploaded successfully',
@@ -599,7 +611,9 @@ app.post('/api/upload/video', upload.single('video'), (req, res) => {
     }
 
     console.log('🎬 Video uploaded:', req.file.filename);
-    const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    // Force HTTPS in production
+    const protocol = req.get('x-forwarded-proto') || req.protocol;
+    const fileUrl = `${protocol}://${req.get('host')}/uploads/${req.file.filename}`;
     
     res.status(200).json({
       message: 'Video uploaded successfully',

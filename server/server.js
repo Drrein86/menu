@@ -491,14 +491,16 @@ app.get('/api/screens/display/:token', async (req, res) => {
 // Create screen
 app.post('/api/screens', async (req, res) => {
   try {
-    const { screen_name, menu_id } = req.body;
+    // Support both 'name' and 'screen_name' for compatibility
+    const screen_name = req.body.screen_name || req.body.name;
+    const menu_id = req.body.menu_id;
     
     console.log('🖥️ Creating screen with:', { screen_name, menu_id, body: req.body });
     
     // Validation
     if (!screen_name) {
       console.log('❌ Missing screen_name');
-      return res.status(400).json({ error: 'screen_name is required' });
+      return res.status(400).json({ error: 'screen_name or name is required' });
     }
     
     if (!menu_id) {

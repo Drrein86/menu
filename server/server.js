@@ -492,6 +492,12 @@ app.get('/api/screens/display/:token', async (req, res) => {
 app.post('/api/screens', async (req, res) => {
   try {
     const { screen_name, menu_id } = req.body;
+    
+    // Validation
+    if (!screen_name || !menu_id) {
+      return res.status(400).json({ error: 'screen_name and menu_id are required' });
+    }
+    
     const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
     
     const result = await pool.query(
@@ -503,8 +509,8 @@ app.post('/api/screens', async (req, res) => {
     req.io.emit('screen_updated', screen);
     res.json(screen);
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ error: 'Server error' });
+    console.error('Error creating screen:', error);
+    res.status(500).json({ error: 'Server error', details: error.message });
   }
 });
 

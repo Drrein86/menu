@@ -3,9 +3,9 @@ const { Pool } = require('pg');
 // Create PostgreSQL connection pool
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: {
+  ssl: process.env.DATABASE_URL?.includes('supabase') ? {
     rejectUnauthorized: false
-  }
+  } : false
 });
 
 // Test connection

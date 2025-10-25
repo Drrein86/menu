@@ -21,6 +21,7 @@
     "setup-postgres": "node setup-postgres.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.76.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.4.1",
     "cors": "^2.8.5",

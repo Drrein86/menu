@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getMenus } from '../api'
+import { getMenus, createMenu } from '../api'
 import toast from 'react-hot-toast'
-import { Edit, Plus, BarChart3 } from 'lucide-react'
+import { Edit, Plus, BarChart3, X } from 'lucide-react'
 import './Dashboard.css'
 
 export default function Dashboard() {
   const [menus, setMenus] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [newMenu, setNewMenu] = useState({ key_name: '', title: '' })
 
   useEffect(() => {
     loadMenus()
@@ -22,6 +24,26 @@ export default function Dashboard() {
       console.error(error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleCreateMenu = async (e) => {
+    e.preventDefault()
+    
+    if (!newMenu.key_name || !newMenu.title) {
+      toast.error('יש למלא את כל השדות')
+      return
+    }
+
+    try {
+      await createMenu(newMenu)
+      toast.success('תפריט חדש נוצר בהצלחה!')
+      setShowAddModal(false)
+      setNewMenu({ key_name: '', title: '' })
+      loadMenus()
+    } catch (error) {
+      toast.error('שגיאה ביצירת התפריט')
+      console.error(error)
     }
   }
 
@@ -41,6 +63,10 @@ export default function Dashboard() {
           <h1>דף הבית</h1>
           <p>ניהול תפריטים דיגיטליים</p>
         </div>
+        <button onClick={() => setShowAddModal(true)} className="add-menu-btn">
+          <Plus size={20} />
+          <span>תפריט חדש</span>
+        </button>
       </div>
 
       <div className="stats-grid">
@@ -114,6 +140,55 @@ export default function Dashboard() {
           )}
         </div>
       </div>
+
+      {/* Modal - הוספת תפריט */}
+      {showAddModal && (
+        <div className="modal-overlay" onClick={() => setShowAddModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h2>תפריט חדש</h2>
+              <button onClick={() => setShowAddModal(false)} className="close-btn">
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateMenu}>
+              <div className="form-group">
+                <label>מזהה תפריט (באנגלית)</label>
+                <input
+                  type="text"
+                  placeholder="לדוגמה: breakfast, lunch, dinner"
+                  value={newMenu.key_name}
+                  onChange={(e) => setNewMenu({ ...newMenu, key_name: e.target.value })}
+                  required
+                />
+                <small>המזהה משמש לצורך טכני בלבד</small>
+              </div>
+
+              <div className="form-group">
+                <label>שם התפריט</label>
+                <input
+                  type="text"
+                  placeholder="לדוגמה: תפריט ארוחת בוקר"
+                  value={newMenu.title}
+                  onChange={(e) => setNewMenu({ ...newMenu, title: e.target.value })}
+                  required
+                />
+              </div>
+
+              <div className="modal-actions">
+                <button type="button" onClick={() => setShowAddModal(false)} className="cancel-btn">
+                  ביטול
+                </button>
+                <button type="submit" className="create-btn">
+                  <Plus size={20} />
+                  <span>צור תפריט</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -41,7 +41,8 @@ export default function ScreenManager() {
       
       // הצג את ה-URL והטוקן
       if (response.data.token) {
-        const url = `${window.location.origin}/display/${response.data.token}`
+        const displayUrl = import.meta.env.VITE_DISPLAY_URL || window.location.origin
+        const url = `${displayUrl}/display/${response.data.token}`
         toast.success(`קישור למסך: ${url}`, { duration: 10000 })
       }
     } catch (error) {
@@ -77,7 +78,8 @@ export default function ScreenManager() {
   }
 
   const getScreenUrl = (token) => {
-    return `${window.location.origin}/display/${token}`
+    const displayUrl = import.meta.env.VITE_DISPLAY_URL || window.location.origin
+    return `${displayUrl}/display/${token}`
   }
 
   if (loading) {

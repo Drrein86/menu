@@ -15,7 +15,6 @@ export default function Display() {
     loadDisplayData()
     setupSocket()
     setupHeartbeat()
-    requestFullscreen()
 
     return () => {
       if (socketRef.current) {
@@ -69,21 +68,6 @@ export default function Display() {
     api.post(`/screens/heartbeat/${token}`).catch(console.error)
 
     return () => clearInterval(interval)
-  }
-
-  const requestFullscreen = () => {
-    const elem = document.documentElement
-    
-    // המתנה קצרה לפני כניסה ל-fullscreen
-    setTimeout(() => {
-      if (elem.requestFullscreen) {
-        elem.requestFullscreen().catch(err => console.log('Fullscreen request failed:', err))
-      } else if (elem.webkitRequestFullscreen) {
-        elem.webkitRequestFullscreen()
-      } else if (elem.msRequestFullscreen) {
-        elem.msRequestFullscreen()
-      }
-    }, 1000)
   }
 
   useEffect(() => {

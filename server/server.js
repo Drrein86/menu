@@ -339,6 +339,29 @@ app.put('/api/menus/:id', async (req, res) => {
   }
 });
 
+// Delete menu
+app.delete('/api/menus/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id);
+    
+    // First, delete all items in this menu
+    await pool.query('DELETE FROM menu_items WHERE menu_id = $1', [id]);
+    
+    // Then delete the menu itself
+    const result = await pool.query('DELETE FROM menus WHERE id = $1 RETURNING *', [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Menu not found' });
+    }
+    
+    req.io.emit('menu_deleted', { id });
+    res.json({ message: 'Menu deleted successfully', id });
+  } catch (error) {
+    console.error('Error deleting menu:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ==================== MENU ITEM ROUTES ====================
 
 // Create new item

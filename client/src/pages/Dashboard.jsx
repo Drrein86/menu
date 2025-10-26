@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { getMenus, createMenu } from '../api'
+import { getMenus, createMenu, deleteMenu } from '../api'
 import toast from 'react-hot-toast'
-import { Edit, Plus, BarChart3, X } from 'lucide-react'
+import { Edit, Plus, BarChart3, X, Trash2 } from 'lucide-react'
 import './Dashboard.css'
 
 export default function Dashboard() {
@@ -43,6 +43,24 @@ export default function Dashboard() {
       loadMenus()
     } catch (error) {
       toast.error('שגיאה ביצירת התפריט')
+      console.error(error)
+    }
+  }
+
+  const handleDeleteMenu = async (menuId, menuTitle, e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    
+    if (!confirm(`האם אתה בטוח שברצונך למחוק את "${menuTitle}"?\n\nפעולה זו תמחק גם את כל הפריטים בתפריט!`)) {
+      return
+    }
+    
+    try {
+      await deleteMenu(menuId)
+      toast.success('התפריט נמחק בהצלחה!')
+      loadMenus()
+    } catch (error) {
+      toast.error('שגיאה במחיקת התפריט')
       console.error(error)
     }
   }
@@ -100,7 +118,7 @@ export default function Dashboard() {
 
         <div className="menus-grid">
           {menus.map((menu) => (
-            <Link to={`/menu/${menu.id}`} key={menu.id} className="menu-card">
+            <div key={menu.id} className="menu-card">
               <div 
                 className="menu-card-header"
                 style={{ background: menu.theme_color || '#3498db' }}
@@ -123,12 +141,21 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                <button className="edit-btn">
-                  <Edit size={18} />
-                  <span>ערוך תפריט</span>
-                </button>
+                <div className="menu-actions">
+                  <Link to={`/menu/${menu.id}`} className="edit-btn">
+                    <Edit size={18} />
+                    <span>ערוך</span>
+                  </Link>
+                  <button 
+                    onClick={(e) => handleDeleteMenu(menu.id, menu.title, e)}
+                    className="delete-menu-btn"
+                  >
+                    <Trash2 size={18} />
+                    <span>מחק</span>
+                  </button>
+                </div>
               </div>
-            </Link>
+            </div>
           ))}
 
           {menus.length === 0 && (

@@ -7,6 +7,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const multer = require('multer');
 const pool = require('./database-postgres');
+const { imageStorage, videoStorage } = require('./config/cloudinary');
 
 // Auto-initialize database on startup
 async function initializeDatabase() {
@@ -140,22 +141,18 @@ async function initializeDatabase() {
 // Initialize database immediately
 initializeDatabase().catch(console.error);
 
-// Configure multer for disk storage
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, 'uploads'));
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    const ext = path.extname(file.originalname);
-    cb(null, file.fieldname + '-' + uniqueSuffix + ext);
+// Configure multer for Cloudinary storage
+const uploadImage = multer({
+  storage: imageStorage,
+  limits: {
+    fileSize: 10 * 1024 * 1024 // 10MB max for images
   }
 });
 
-const upload = multer({
-  storage: storage,
+const uploadVideo = multer({
+  storage: videoStorage,
   limits: {
-    fileSize: 50 * 1024 * 1024 // 50MB max
+    fileSize: 100 * 1024 * 1024 // 100MB max for videos
   }
 });
 
@@ -631,16 +628,15 @@ app.post('/api/screens/heartbeat/:token', async (req, res) => {
 
 // ==================== UPLOAD ROUTES ====================
 
-app.post('/api/upload/image', upload.single('image'), (req, res) => {
+app.post('/api/upload/image', uploadImage.single('image'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    console.log('📸 Image uploaded:', req.file.filename);
-    // Force HTTPS in production
-    const protocol = req.get('x-forwarded-proto') || req.protocol;
-    const fileUrl = `${protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    console.log('📸 Image uploaded to Cloudinary:', req.file.filename);
+    // Cloudinary automatically provides the full URL
+    const fileUrl = req.file.path;
     
     res.status(200).json({
       message: 'Image uploaded successfully',
@@ -657,16 +653,15 @@ app.post('/api/upload/image', upload.single('image'), (req, res) => {
   }
 });
 
-app.post('/api/upload/video', upload.single('video'), (req, res) => {
+app.post('/api/upload/video', uploadVideo.single('video'), (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ error: 'No file uploaded' });
     }
 
-    console.log('🎬 Video uploaded:', req.file.filename);
-    // Force HTTPS in production
-    const protocol = req.get('x-forwarded-proto') || req.protocol;
-    const fileUrl = `${protocol}://${req.get('host')}/uploads/${req.file.filename}`;
+    console.log('🎬 Video uploaded to Cloudinary:', req.file.filename);
+    // Cloudinary automatically provides the full URL
+    const fileUrl = req.file.path;
     
     res.status(200).json({
       message: 'Video uploaded successfully',

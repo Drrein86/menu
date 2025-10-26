@@ -308,6 +308,34 @@ app.get('/api/menus/:id', async (req, res) => {
   }
 });
 
+// Create new menu
+app.post('/api/menus', async (req, res) => {
+  try {
+    const { key_name, title } = req.body;
+    
+    if (!key_name || !title) {
+      return res.status(400).json({ error: 'key_name and title are required' });
+    }
+    
+    const result = await pool.query(
+      `INSERT INTO menus (key_name, title, theme_color, bg_color, text_color, font_family, font_size_title, font_size_item)
+       VALUES ($1, $2, '#FF6B35', '#FFFFFF', '#2C3E50', 'Rubik', 52, 24)
+       RETURNING *`,
+      [key_name, title]
+    );
+    
+    const menu = result.rows[0];
+    req.io.emit('menu_created', menu);
+    res.json(menu);
+  } catch (error) {
+    console.error('Error creating menu:', error);
+    if (error.code === '23505') { // Unique constraint violation
+      return res.status(409).json({ error: 'Menu with this key_name already exists' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Update menu
 app.put('/api/menus/:id', async (req, res) => {
   try {

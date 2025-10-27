@@ -348,9 +348,10 @@
 
   .menu-area {
     flex: 2;
-    padding: 20px 30px;
-    overflow-y: auto; /* מאפשר גלילה */
-    -webkit-overflow-scrolling: touch; /* גלילה חלקה ב-iOS */
+    padding: 15px 25px;
+    overflow-y: hidden; /* ללא גלילה - הכל במסך אחד */
+    display: flex;
+    flex-direction: column;
   }
 
   .video-area {
@@ -359,40 +360,49 @@
   }
 
   .menu-header {
-    margin-bottom: 20px;
-    padding: 20px;
-    min-height: 60px;
+    margin-bottom: 15px;
+    padding: 15px;
+    min-height: 50px;
+    flex-shrink: 0;
   }
 
   .menu-title {
-    font-size: calc(var(--font-size-title, 52px) * 0.6);
+    font-size: calc(var(--font-size-title, 52px) * 0.5);
   }
 
   .menu-items {
-    grid-template-columns: 1fr 1fr;
-    gap: 15px;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); /* התאמה דינמית */
+    gap: 12px;
     padding: 0 10px;
+    flex: 1;
+    overflow: hidden;
+    height: 100%;
+    align-content: start;
   }
 
   .menu-item {
-    padding: 12px;
+    padding: 10px;
+    gap: 8px;
+    min-height: 0;
   }
 
   .item-name {
-    font-size: calc(var(--font-size-item, 24px) * 0.7);
+    font-size: calc(var(--font-size-item, 24px) * 0.6);
+    margin-bottom: 5px;
   }
 
   .item-description {
-    font-size: calc(var(--font-size-item, 24px) * 0.5);
+    font-size: calc(var(--font-size-item, 24px) * 0.45);
+    margin-bottom: 6px;
   }
 
   .item-price {
-    font-size: calc(var(--font-size-item, 24px) * 0.9);
-    padding: 8px 20px;
+    font-size: calc(var(--font-size-item, 24px) * 0.8);
+    padding: 6px 15px;
   }
 
   .item-image {
-    height: 80px;
+    height: 70px;
   }
 }
 
